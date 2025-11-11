@@ -1,0 +1,69 @@
+version: "3.9"
+
+services:
+  frontend-build:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ../frontend:/app
+    command: sh -c "npm install && npm run build"
+
+  caddy:
+    image: caddy:2
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+      - ../frontend/dist:/srv
+    depends_on:
+      - frontend-build
+      - api
+
+  api:
+    image: python:3.12-slim
+    working_dir: /app
+    command: bash -c "pip install -U pip && pip install -e .[dev] && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    volumes:
+      - ../backend:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+psycopg://hub:hub@db:5432/hub
+      - REDIS_URL=redis://redis:6379/0
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=hub
+      - MINIO_SECRET_KEY=hubsecret
+      - MINIO_SECURE=false
+      - ORIGINS=http://familyhub.local,https://familyhub.local
+      - GOOGLE_CAL_CREDS_JSON=/app/creds/gcal.json
+    depends_on: [db, redis, minio]
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=hub
+      - POSTGRES_PASSWORD=hub
+      - POSTGRES_DB=hub
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=hub
+      - MINIO_ROOT_PASSWORD=hubsecret
+    ports:
+      - "9001:9001"
+    volumes:
+      - minio:/data
+
+volumes:
+  caddy_data:
+  caddy_config:
+  pgdata:
+  minio:
