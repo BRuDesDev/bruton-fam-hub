@@ -1,16 +1,12 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { HeartPulse, RefreshCw, Sparkles } from "lucide-react";
+import { EventForm } from "@/components/dashboard/EventForm";
+import { EventTimeline } from "@/components/dashboard/EventTimeline";
+import { StatCard } from "@/components/dashboard/StatCard";
 import { useEvents } from "@/hooks/useEvents";
 import { apiClient } from "@/lib/api";
 import { connectWS } from "@/ws";
-const eventDateFormatter = new Intl.DateTimeFormat(undefined, {
-    dateStyle: "full",
-    timeStyle: "short"
-});
-const createdFormatter = new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short"
-});
 const pad = (value) => `${value}`.padStart(2, "0");
 const localDateTimeInputValue = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 const createDefaultFormState = () => ({
@@ -18,15 +14,24 @@ const createDefaultFormState = () => ({
     when: localDateTimeInputValue(new Date()),
     notes: ""
 });
-const getReadableDate = (value, formatter) => {
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? value : formatter.format(date);
-};
 const getErrorMessage = (error) => {
     if (error instanceof Error) {
         return error.message;
     }
     return "Something went wrong";
+};
+const getCountdownLabel = (date) => {
+    const diffMs = date.getTime() - Date.now();
+    if (diffMs <= 0)
+        return "Happening now";
+    const minutes = Math.floor(diffMs / (1000 * 60));
+    const days = Math.floor(minutes / (60 * 24));
+    if (days > 0)
+        return `${days} day${days === 1 ? "" : "s"} away`;
+    const hours = Math.floor(minutes / 60);
+    if (hours > 0)
+        return `${hours} hour${hours === 1 ? "" : "s"} away`;
+    return `${Math.max(minutes, 1)} min away`;
 };
 export default function App() {
     const [health, setHealth] = useState(null);
@@ -34,6 +39,9 @@ export default function App() {
     const [formState, setFormState] = useState(() => createDefaultFormState());
     const [formError, setFormError] = useState(null);
     const { events, isLoading, loadError, isSaving, saveError, createEvent, refresh } = useEvents();
+    const nextEvent = events[0] ?? null;
+    const nextEventDate = nextEvent ? new Date(nextEvent.when) : null;
+    const upcomingCount = useMemo(() => events.filter((eventItem) => new Date(eventItem.when).getTime() > Date.now()).length, [events]);
     useEffect(() => {
         let isMounted = true;
         apiClient
@@ -83,5 +91,8 @@ export default function App() {
             setFormError(getErrorMessage(error));
         }
     };
-    return (_jsx("main", { className: "min-h-screen bg-slate-50 p-6 text-slate-900", children: _jsxs("div", { className: "mx-auto max-w-5xl space-y-8", children: [_jsxs("header", { className: "space-y-2", children: [_jsx("p", { className: "text-sm font-semibold uppercase tracking-[0.2em] text-slate-500", children: "Family Command Center" }), _jsx("h1", { className: "text-3xl font-bold", children: "Bruton Family Hub" }), _jsx("p", { className: "text-base text-slate-600", children: "Health, events, and coordination tools for the household." })] }), _jsxs("section", { className: "rounded-xl border border-slate-200 bg-white p-5 shadow-sm", children: [_jsx("h2", { className: "text-lg font-semibold text-slate-900", children: "Backend status" }), _jsx("p", { className: "text-sm text-slate-500", children: "Live snapshot of the FastAPI service." }), _jsxs("div", { className: "mt-4 rounded-lg bg-slate-900 p-4 font-mono text-sm text-slate-100", children: [health && (_jsx("pre", { className: "overflow-x-auto", children: JSON.stringify(health, null, 2) })), !health && !healthError && _jsx("p", { children: "Checking API\u2026" }), healthError && _jsxs("p", { className: "text-rose-300", children: ["Health check failed: ", healthError] })] })] }), _jsxs("section", { className: "rounded-2xl border border-slate-200 bg-white p-6 shadow-sm", children: [_jsxs("div", { className: "mb-6 flex flex-col gap-2 md:flex-row md:items-center md:justify-between", children: [_jsxs("div", { children: [_jsx("h2", { className: "text-xl font-semibold text-slate-900", children: "Household events" }), _jsx("p", { className: "text-sm text-slate-500", children: "Add shared plans and keep everyone in sync." })] }), _jsx("button", { type: "button", onClick: () => refresh(), className: "text-sm font-semibold text-indigo-600 hover:text-indigo-500", children: "Refresh" })] }), _jsxs("div", { className: "grid gap-6 lg:grid-cols-[360px,1fr]", children: [_jsxs("form", { onSubmit: handleSubmit, className: "rounded-xl border border-slate-200 bg-slate-50/60 p-4 shadow-inner", children: [_jsx("h3", { className: "text-base font-semibold text-slate-900", children: "Add something new" }), _jsxs("div", { className: "mt-4 space-y-4", children: [_jsxs("label", { className: "block text-sm font-medium text-slate-700", children: ["Title", _jsx("input", { type: "text", name: "title", value: formState.title, onChange: (event) => setFormState((prev) => ({ ...prev, title: event.target.value })), className: "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-base shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50", placeholder: "Mom's birthday dinner" })] }), _jsxs("label", { className: "block text-sm font-medium text-slate-700", children: ["When", _jsx("input", { type: "datetime-local", name: "when", value: formState.when, onChange: (event) => setFormState((prev) => ({ ...prev, when: event.target.value })), className: "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-base shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50" })] }), _jsxs("label", { className: "block text-sm font-medium text-slate-700", children: ["Notes", _jsx("textarea", { name: "notes", value: formState.notes, onChange: (event) => setFormState((prev) => ({ ...prev, notes: event.target.value })), className: "mt-1 h-24 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-base shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50", placeholder: "Directions, potluck assignments, etc." })] })] }), (formError || saveError) && (_jsx("p", { className: "mt-3 text-sm text-rose-600", children: formError ?? saveError })), _jsx("button", { type: "submit", className: "mt-4 w-full rounded-lg bg-indigo-600 px-4 py-2 text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-400", disabled: isSaving, children: isSaving ? "Saving…" : "Save event" })] }), _jsxs("div", { className: "space-y-3", children: [isLoading && _jsx("p", { className: "text-sm text-slate-500", children: "Loading events\u2026" }), loadError && _jsxs("p", { className: "text-sm text-rose-600", children: ["Unable to load events: ", loadError] }), !isLoading && !loadError && events.length === 0 && (_jsx("p", { className: "rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500", children: "Nothing on the calendar yet. Add the first plan!" })), events.map((eventItem) => (_jsxs("article", { className: "rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-indigo-200", children: [_jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2", children: [_jsx("h3", { className: "text-lg font-semibold text-slate-900", children: eventItem.title }), _jsxs("p", { className: "text-xs uppercase tracking-wide text-slate-400", children: ["Created ", getReadableDate(eventItem.created_at, createdFormatter)] })] }), _jsx("p", { className: "mt-1 text-sm text-slate-500", children: getReadableDate(eventItem.when, eventDateFormatter) }), eventItem.notes && (_jsx("p", { className: "mt-3 whitespace-pre-line text-sm text-slate-700", children: eventItem.notes }))] }, eventItem.id)))] })] })] })] }) }));
+    const handleFieldChange = (field, value) => {
+        setFormState((prev) => ({ ...prev, [field]: value }));
+    };
+    return (_jsx("main", { className: "min-h-screen bg-slate-950 text-white", children: _jsxs("div", { className: "relative isolate overflow-hidden", children: [_jsx("div", { className: "pointer-events-none absolute inset-x-0 top-[-20rem] -z-10 hidden h-[80rem] bg-[radial-gradient(ellipse_at_top,_rgba(99,102,241,0.35),_transparent_55%)] sm:block" }), _jsxs("div", { className: "mx-auto flex min-h-screen max-w-6xl flex-col gap-12 px-4 py-8 sm:px-6 lg:px-8", children: [_jsxs("header", { className: "flex flex-col gap-6 border-b border-white/10 pb-10 lg:flex-row lg:items-center lg:justify-between", children: [_jsxs("div", { children: [_jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.5em] text-slate-300/80", children: "Family Command Center" }), _jsx("h1", { className: "mt-4 text-4xl font-semibold tracking-tight text-white md:text-5xl", children: "Bruton Family Hub" }), _jsx("p", { className: "mt-3 max-w-2xl text-base text-slate-200/80", children: "Health, events, and coordination tools for every Bruton. Plan meals, track moments, and keep the household in sync." })] }), _jsxs("div", { className: "flex flex-wrap gap-3", children: [_jsxs("button", { type: "button", onClick: () => refresh(), className: "inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10", children: [_jsx(RefreshCw, { className: "h-4 w-4" }), "Refresh events"] }), _jsxs("button", { type: "button", onClick: () => document.getElementById("event-form")?.scrollIntoView({ behavior: "smooth" }), className: "inline-flex items-center gap-2 rounded-2xl bg-indigo-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-400", children: [_jsx(Sparkles, { className: "h-4 w-4" }), "New entry"] })] })] }), _jsxs("section", { className: "grid gap-6 md:grid-cols-2 lg:grid-cols-3", children: [_jsx(StatCard, { title: "API health", value: health?.ok ? "Online" : healthError ? "Offline" : "Checking…", description: health?.ok ? "FastAPI is responding normally." : healthError ?? "Waiting for response…", icon: HeartPulse, tone: "emerald", footer: health?.ok ? _jsx("span", { className: "text-emerald-100/80", children: "Live connection established" }) : _jsx("span", { className: "text-rose-100/80", children: "Health check failed" }) }), _jsx(StatCard, { title: "Next gathering", value: nextEventDate ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(nextEventDate) : "No plans yet", description: nextEventDate ? getCountdownLabel(nextEventDate) : "Add something to kick things off.", icon: Sparkles, tone: "violet", footer: nextEvent?.notes ? _jsx("span", { className: "text-slate-100/80", children: nextEvent.notes }) : null }), _jsx(StatCard, { title: "Upcoming events", value: upcomingCount, description: "On the calendar", icon: RefreshCw, tone: "sky", footer: _jsxs("span", { className: "text-slate-100/80", children: ["Total scheduled: ", events.length] }) })] }), _jsxs("section", { className: "grid gap-8 lg:grid-cols-[380px,1fr]", children: [_jsx("div", { id: "event-form", children: _jsx(EventForm, { formState: formState, onFieldChange: handleFieldChange, onSubmit: handleSubmit, isSaving: isSaving, formError: formError, saveError: saveError }) }), _jsxs("div", { className: "space-y-4", children: [_jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3", children: [_jsxs("div", { children: [_jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.4em] text-slate-300/80", children: "Family timeline" }), _jsx("h2", { className: "mt-2 text-2xl font-semibold text-white", children: "Household events" }), _jsx("p", { className: "text-sm text-slate-300/80", children: "Live updates from FastAPI, streamed over WebSockets." })] }), _jsxs("button", { type: "button", onClick: () => refresh(), className: "inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10", children: [_jsx(RefreshCw, { className: "h-4 w-4" }), "Refresh"] })] }), _jsx(EventTimeline, { events: events, isLoading: isLoading, loadError: loadError, onRefresh: refresh })] })] })] })] }) }));
 }

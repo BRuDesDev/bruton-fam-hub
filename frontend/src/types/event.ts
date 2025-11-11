@@ -11,3 +11,9 @@ export interface EventPayload {
   when: string;
   notes?: string;
 }
+
+export interface EventFormState {
+  title: string;
+  when: string;
+  notes: string;
+}

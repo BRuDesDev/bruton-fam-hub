@@ -1,29 +1,17 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { HeartPulse, RefreshCw, Sparkles } from "lucide-react";
 
+import { EventForm } from "@/components/dashboard/EventForm";
+import { EventTimeline } from "@/components/dashboard/EventTimeline";
+import { StatCard } from "@/components/dashboard/StatCard";
 import { useEvents } from "@/hooks/useEvents";
 import { apiClient } from "@/lib/api";
-import type { EventPayload } from "@/types/event";
+import type { EventFormState, EventPayload } from "@/types/event";
 import { connectWS } from "@/ws";
 
 type HealthResponse = {
   ok: boolean;
 };
-
-type EventFormState = {
-  title: string;
-  when: string;
-  notes: string;
-};
-
-const eventDateFormatter = new Intl.DateTimeFormat(undefined, {
-  dateStyle: "full",
-  timeStyle: "short"
-});
-
-const createdFormatter = new Intl.DateTimeFormat(undefined, {
-  dateStyle: "medium",
-  timeStyle: "short"
-});
 
 const pad = (value: number) => `${value}`.padStart(2, "0");
 
@@ -36,16 +24,22 @@ const createDefaultFormState = (): EventFormState => ({
   notes: ""
 });
 
-const getReadableDate = (value: string, formatter: Intl.DateTimeFormat) => {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : formatter.format(date);
-};
-
 const getErrorMessage = (error: unknown) => {
   if (error instanceof Error) {
     return error.message;
   }
   return "Something went wrong";
+};
+
+const getCountdownLabel = (date: Date) => {
+  const diffMs = date.getTime() - Date.now();
+  if (diffMs <= 0) return "Happening now";
+  const minutes = Math.floor(diffMs / (1000 * 60));
+  const days = Math.floor(minutes / (60 * 24));
+  if (days > 0) return `${days} day${days === 1 ? "" : "s"} away`;
+  const hours = Math.floor(minutes / 60);
+  if (hours > 0) return `${hours} hour${hours === 1 ? "" : "s"} away`;
+  return `${Math.max(minutes, 1)} min away`;
 };
 
 export default function App() {
@@ -55,6 +49,13 @@ export default function App() {
   const [formError, setFormError] = useState<string | null>(null);
 
   const { events, isLoading, loadError, isSaving, saveError, createEvent, refresh } = useEvents();
+
+  const nextEvent = events[0] ?? null;
+  const nextEventDate = nextEvent ? new Date(nextEvent.when) : null;
+  const upcomingCount = useMemo(
+    () => events.filter((eventItem) => new Date(eventItem.when).getTime() > Date.now()).length,
+    [events]
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -110,127 +111,103 @@ export default function App() {
     }
   };
 
+  const handleFieldChange = (field: keyof EventFormState, value: string) => {
+    setFormState((prev) => ({ ...prev, [field]: value }));
+  };
+
   return (
-    <main className="min-h-screen bg-slate-50 p-6 text-slate-900">
-      <div className="mx-auto max-w-5xl space-y-8">
-        <header className="space-y-2">
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Family Command Center</p>
-          <h1 className="text-3xl font-bold">Bruton Family Hub</h1>
-          <p className="text-base text-slate-600">Health, events, and coordination tools for the household.</p>
-        </header>
-
-        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Backend status</h2>
-          <p className="text-sm text-slate-500">Live snapshot of the FastAPI service.</p>
-          <div className="mt-4 rounded-lg bg-slate-900 p-4 font-mono text-sm text-slate-100">
-            {health && (
-              <pre className="overflow-x-auto">
-                {JSON.stringify(health, null, 2)}
-              </pre>
-            )}
-            {!health && !healthError && <p>Checking API…</p>}
-            {healthError && <p className="text-rose-300">Health check failed: {healthError}</p>}
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="mb-6 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+    <main className="min-h-screen bg-slate-950 text-white">
+      <div className="relative isolate overflow-hidden">
+        <div className="pointer-events-none absolute inset-x-0 top-[-20rem] -z-10 hidden h-[80rem] bg-[radial-gradient(ellipse_at_top,_rgba(99,102,241,0.35),_transparent_55%)] sm:block" />
+        <div className="mx-auto flex min-h-screen max-w-6xl flex-col gap-12 px-4 py-8 sm:px-6 lg:px-8">
+          <header className="flex flex-col gap-6 border-b border-white/10 pb-10 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h2 className="text-xl font-semibold text-slate-900">Household events</h2>
-              <p className="text-sm text-slate-500">Add shared plans and keep everyone in sync.</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.5em] text-slate-300/80">Family Command Center</p>
+              <h1 className="mt-4 text-4xl font-semibold tracking-tight text-white md:text-5xl">Bruton Family Hub</h1>
+              <p className="mt-3 max-w-2xl text-base text-slate-200/80">
+                Health, events, and coordination tools for every Bruton. Plan meals, track moments, and keep the household in sync.
+              </p>
             </div>
-            <button
-              type="button"
-              onClick={() => refresh()}
-              className="text-sm font-semibold text-indigo-600 hover:text-indigo-500"
-            >
-              Refresh
-            </button>
-          </div>
-
-          <div className="grid gap-6 lg:grid-cols-[360px,1fr]">
-            <form onSubmit={handleSubmit} className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 shadow-inner">
-              <h3 className="text-base font-semibold text-slate-900">Add something new</h3>
-
-              <div className="mt-4 space-y-4">
-                <label className="block text-sm font-medium text-slate-700">
-                  Title
-                  <input
-                    type="text"
-                    name="title"
-                    value={formState.title}
-                    onChange={(event) => setFormState((prev) => ({ ...prev, title: event.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-base shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-                    placeholder="Mom's birthday dinner"
-                  />
-                </label>
-
-                <label className="block text-sm font-medium text-slate-700">
-                  When
-                  <input
-                    type="datetime-local"
-                    name="when"
-                    value={formState.when}
-                    onChange={(event) => setFormState((prev) => ({ ...prev, when: event.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-base shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-                  />
-                </label>
-
-                <label className="block text-sm font-medium text-slate-700">
-                  Notes
-                  <textarea
-                    name="notes"
-                    value={formState.notes}
-                    onChange={(event) => setFormState((prev) => ({ ...prev, notes: event.target.value }))}
-                    className="mt-1 h-24 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-base shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-                    placeholder="Directions, potluck assignments, etc."
-                  />
-                </label>
-              </div>
-
-              {(formError || saveError) && (
-                <p className="mt-3 text-sm text-rose-600">{formError ?? saveError}</p>
-              )}
-
+            <div className="flex flex-wrap gap-3">
               <button
-                type="submit"
-                className="mt-4 w-full rounded-lg bg-indigo-600 px-4 py-2 text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-400"
-                disabled={isSaving}
+                type="button"
+                onClick={() => refresh()}
+                className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
               >
-                {isSaving ? "Saving…" : "Save event"}
+                <RefreshCw className="h-4 w-4" />
+                Refresh events
               </button>
-            </form>
-
-            <div className="space-y-3">
-              {isLoading && <p className="text-sm text-slate-500">Loading events…</p>}
-              {loadError && <p className="text-sm text-rose-600">Unable to load events: {loadError}</p>}
-              {!isLoading && !loadError && events.length === 0 && (
-                <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
-                  Nothing on the calendar yet. Add the first plan!
-                </p>
-              )}
-              {events.map((eventItem) => (
-                <article
-                  key={eventItem.id}
-                  className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-indigo-200"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="text-lg font-semibold text-slate-900">{eventItem.title}</h3>
-                    <p className="text-xs uppercase tracking-wide text-slate-400">
-                      Created {getReadableDate(eventItem.created_at, createdFormatter)}
-                    </p>
-                  </div>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {getReadableDate(eventItem.when, eventDateFormatter)}
-                  </p>
-                  {eventItem.notes && (
-                    <p className="mt-3 whitespace-pre-line text-sm text-slate-700">{eventItem.notes}</p>
-                  )}
-                </article>
-              ))}
+              <button
+                type="button"
+                onClick={() => document.getElementById("event-form")?.scrollIntoView({ behavior: "smooth" })}
+                className="inline-flex items-center gap-2 rounded-2xl bg-indigo-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-400"
+              >
+                <Sparkles className="h-4 w-4" />
+                New entry
+              </button>
             </div>
-          </div>
-        </section>
+          </header>
+
+          <section className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <StatCard
+              title="API health"
+              value={health?.ok ? "Online" : healthError ? "Offline" : "Checking…"}
+              description={health?.ok ? "FastAPI is responding normally." : healthError ?? "Waiting for response…"}
+              icon={HeartPulse}
+              tone="emerald"
+              footer={
+                health?.ok ? <span className="text-emerald-100/80">Live connection established</span> : <span className="text-rose-100/80">Health check failed</span>
+              }
+            />
+            <StatCard
+              title="Next gathering"
+              value={nextEventDate ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(nextEventDate) : "No plans yet"}
+              description={nextEventDate ? getCountdownLabel(nextEventDate) : "Add something to kick things off."}
+              icon={Sparkles}
+              tone="violet"
+              footer={nextEvent?.notes ? <span className="text-slate-100/80">{nextEvent.notes}</span> : null}
+            />
+            <StatCard
+              title="Upcoming events"
+              value={upcomingCount}
+              description="On the calendar"
+              icon={RefreshCw}
+              tone="sky"
+              footer={<span className="text-slate-100/80">Total scheduled: {events.length}</span>}
+            />
+          </section>
+
+          <section className="grid gap-8 lg:grid-cols-[380px,1fr]">
+            <div id="event-form">
+              <EventForm
+                formState={formState}
+                onFieldChange={handleFieldChange}
+                onSubmit={handleSubmit}
+                isSaving={isSaving}
+                formError={formError}
+                saveError={saveError}
+              />
+            </div>
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.4em] text-slate-300/80">Family timeline</p>
+                  <h2 className="mt-2 text-2xl font-semibold text-white">Household events</h2>
+                  <p className="text-sm text-slate-300/80">Live updates from FastAPI, streamed over WebSockets.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => refresh()}
+                  className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Refresh
+                </button>
+              </div>
+              <EventTimeline events={events} isLoading={isLoading} loadError={loadError} onRefresh={refresh} />
+            </div>
+          </section>
+        </div>
       </div>
     </main>
   );
